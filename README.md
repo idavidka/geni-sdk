@@ -1,6 +1,6 @@
 # @treeviz/geni-sdk
 
-Part of the **@treeviz** organization - A collection of tools for genealogy data processing and visualization.
+> Part of the **@treeviz** organization - A collection of tools for genealogy data processing and visualization.
 
 Modern TypeScript SDK for Geni.com API - OAuth, Profiles API, World Family Tree, and genealogy utilities.
 
