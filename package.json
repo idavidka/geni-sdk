@@ -1,0 +1,76 @@
+{
+	"name": "@treeviz/geni-sdk",
+	"version": "1.0.0",
+	"description": "Modern TypeScript SDK for Geni.com API - OAuth, Profiles API, World Family Tree, and genealogy utilities",
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"require": "./dist/index.cjs"
+		},
+		"./auth": {
+			"types": "./dist/auth/index.d.ts",
+			"import": "./dist/auth/index.js",
+			"require": "./dist/auth/index.cjs"
+		},
+		"./api": {
+			"types": "./dist/api/index.d.ts",
+			"import": "./dist/api/index.js",
+			"require": "./dist/api/index.cjs"
+		},
+		"./utils": {
+			"types": "./dist/utils/index.d.ts",
+			"import": "./dist/utils/index.js",
+			"require": "./dist/utils/index.cjs"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"build": "tsup",
+		"dev": "tsup --watch",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"lint": "tsc --noEmit",
+		"clean": "rm -rf dist",
+		"prepublishOnly": "npm run build"
+	},
+	"keywords": [
+		"geni",
+		"geni.com",
+		"genealogy",
+		"family-tree",
+		"world-family-tree",
+		"api",
+		"sdk",
+		"oauth",
+		"typescript"
+	],
+	"author": "idavidka and @treeviz contributors",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git@github.com:idavidka/geni-sdk.git"
+	},
+	"homepage": "https://github.com/idavidka/geni-sdk#readme",
+	"bugs": {
+		"url": "https://github.com/idavidka/geni-sdk/issues"
+	},
+	"devDependencies": {
+		"@types/node": "^25.0.9",
+		"jsdom": "^27.4.0",
+		"tsup": "^8.0.0",
+		"typescript": "^5.1.6",
+		"vitest": "^3.0.7"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	}
+}
