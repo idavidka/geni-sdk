@@ -37,7 +37,9 @@ const OAUTH_TOKENS_KEY = "geni_oauth_tokens";
 export function generateOAuthState(): string {
 	const array = new Uint8Array(32);
 	crypto.getRandomValues(array);
-	return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("");
+	return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
+		""
+	);
 }
 
 /**
@@ -98,14 +100,51 @@ export function buildAuthorizationUrl(config: GeniOAuthConfig): string {
 }
 
 /**
+ * Open OAuth authorization in a popup window
+ */
+export function openOAuthPopup(
+	authUrl: string,
+	options: {
+		width?: number;
+		height?: number;
+		windowName?: string;
+	} = {}
+): Window | null {
+	if (typeof window === "undefined") {
+		throw new Error("window is not available");
+	}
+
+	const width = options.width || 600;
+	const height = options.height || 700;
+	const windowName = options.windowName || "Geni Login";
+
+	const left = window.screenX + (window.outerWidth - width) / 2;
+	const top = window.screenY + (window.outerHeight - height) / 2;
+
+	const popup = window.open(
+		authUrl,
+		windowName,
+		`width=${width},height=${height},left=${left},top=${top},toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes`
+	);
+
+	if (popup) {
+		popup.focus();
+	}
+
+	return popup;
+}
+
+/**
  * Exchange authorization code for access token
  */
 export async function exchangeCodeForToken(
 	code: string,
-	config: GeniOAuthConfig,
+	config: GeniOAuthConfig
 ): Promise<GeniOAuthTokenResponse> {
 	if (!config.clientSecret) {
-		throw new Error("Client secret is required for token exchange (server-side only)");
+		throw new Error(
+			"Client secret is required for token exchange (server-side only)"
+		);
 	}
 
 	const params: OAuthTokenExchangeParams = {
@@ -132,7 +171,9 @@ export async function exchangeCodeForToken(
 
 	if (!response.ok) {
 		const errorText = await response.text();
-		throw new Error(`Token exchange failed: ${response.status} ${errorText}`);
+		throw new Error(
+			`Token exchange failed: ${response.status} ${errorText}`
+		);
 	}
 
 	const tokenResponse = (await response.json()) as GeniOAuthTokenResponse;
@@ -144,10 +185,12 @@ export async function exchangeCodeForToken(
  */
 export async function refreshAccessToken(
 	refreshToken: string,
-	config: GeniOAuthConfig,
+	config: GeniOAuthConfig
 ): Promise<GeniOAuthTokenResponse> {
 	if (!config.clientSecret) {
-		throw new Error("Client secret is required for token refresh (server-side only)");
+		throw new Error(
+			"Client secret is required for token refresh (server-side only)"
+		);
 	}
 
 	const params: OAuthTokenExchangeParams = {
@@ -173,7 +216,9 @@ export async function refreshAccessToken(
 
 	if (!response.ok) {
 		const errorText = await response.text();
-		throw new Error(`Token refresh failed: ${response.status} ${errorText}`);
+		throw new Error(
+			`Token refresh failed: ${response.status} ${errorText}`
+		);
 	}
 
 	const tokenResponse = (await response.json()) as GeniOAuthTokenResponse;
@@ -181,37 +226,112 @@ export async function refreshAccessToken(
 }
 
 /**
- * Store OAuth tokens in browser storage
+ * Generate a storage key scoped to a user ID
  */
-export function storeTokens(tokens: GeniOAuthTokenResponse): void {
-	if (typeof window !== "undefined" && window.localStorage) {
-		window.localStorage.setItem(OAUTH_TOKENS_KEY, JSON.stringify(tokens));
+export function getTokenStorageKey(
+	userId: string,
+	type: "access" | "expires" | "refresh"
+): string {
+	return `geni_token_${userId}_${type}`;
+}
+
+/**
+ * Store Geni access/refresh tokens in browser storage.
+ * - Access tokens stored in sessionStorage (cleared on browser close)
+ * - Refresh tokens stored in localStorage (persistent, for re-authentication)
+ */
+export function storeTokens(
+	userId: string,
+	tokens: {
+		accessToken: string;
+		expiresAt?: number;
+		refreshToken?: string;
+	}
+): void {
+	if (
+		typeof sessionStorage === "undefined" ||
+		typeof localStorage === "undefined"
+	) {
+		throw new Error("Storage APIs are not available");
+	}
+
+	// Access token in sessionStorage (temporary)
+	sessionStorage.setItem(
+		getTokenStorageKey(userId, "access"),
+		tokens.accessToken
+	);
+
+	if (tokens.expiresAt) {
+		sessionStorage.setItem(
+			getTokenStorageKey(userId, "expires"),
+			tokens.expiresAt.toString()
+		);
+	}
+
+	// Refresh token in localStorage (persistent)
+	if (tokens.refreshToken) {
+		localStorage.setItem(
+			getTokenStorageKey(userId, "refresh"),
+			tokens.refreshToken
+		);
 	}
 }
 
 /**
- * Get stored access token
+ * Get stored access token for a user (checks expiration with 5-minute buffer).
+ * Returns null if token is missing or expired.
  */
-export function getStoredAccessToken(): string | null {
-	if (typeof window === "undefined" || !window.localStorage) {
+export function getStoredAccessToken(userId: string): string | null {
+	if (typeof sessionStorage === "undefined") {
 		return null;
 	}
 
-	const tokensJson = window.localStorage.getItem(OAUTH_TOKENS_KEY);
-	if (!tokensJson) {
+	const token = sessionStorage.getItem(getTokenStorageKey(userId, "access"));
+	const expiresAt = sessionStorage.getItem(
+		getTokenStorageKey(userId, "expires")
+	);
+
+	if (!token) {
 		return null;
 	}
 
-	try {
-		const tokens = JSON.parse(tokensJson) as GeniOAuthTokenResponse;
-		return tokens.access_token;
-	} catch {
+	// Check expiration with 5-minute buffer
+	const EXPIRATION_BUFFER = 5 * 60 * 1000;
+	if (expiresAt && Date.now() > parseInt(expiresAt) - EXPIRATION_BUFFER) {
 		return null;
+	}
+
+	return token;
+}
+
+/**
+ * Get stored refresh token for a user.
+ */
+export function getStoredRefreshToken(userId: string): string | null {
+	if (typeof localStorage === "undefined") {
+		return null;
+	}
+
+	return localStorage.getItem(getTokenStorageKey(userId, "refresh"));
+}
+
+/**
+ * Clear all stored tokens for a user.
+ */
+export function clearStoredTokens(userId: string): void {
+	if (typeof sessionStorage !== "undefined") {
+		sessionStorage.removeItem(getTokenStorageKey(userId, "access"));
+		sessionStorage.removeItem(getTokenStorageKey(userId, "expires"));
+	}
+
+	if (typeof localStorage !== "undefined") {
+		localStorage.removeItem(getTokenStorageKey(userId, "refresh"));
 	}
 }
 
 /**
- * Clear stored tokens
+ * Clear stored tokens (legacy — clears the old non-scoped key if present)
+ * @deprecated Use clearStoredTokens(userId) instead
  */
 export function clearTokens(): void {
 	if (typeof window !== "undefined" && window.localStorage) {
@@ -249,7 +369,10 @@ export class OAuthAPI {
 	/**
 	 * Handle OAuth callback (validate state and exchange code for token)
 	 */
-	async handleCallback(code: string, state: string): Promise<GeniOAuthTokenResponse> {
+	async handleCallback(
+		code: string,
+		state: string
+	): Promise<GeniOAuthTokenResponse> {
 		// Validate state
 		const validation = validateOAuthState(state);
 		if (!validation.valid) {
@@ -259,8 +382,11 @@ export class OAuthAPI {
 		// Exchange code for token
 		const tokens = await exchangeCodeForToken(code, this.config);
 
-		// Store tokens
-		storeTokens(tokens);
+		// Store tokens (scoped to a generic session key when no userId is available)
+		storeTokens("_session", {
+			accessToken: tokens.access_token,
+			refreshToken: tokens.refresh_token,
+		});
 
 		return tokens;
 	}
@@ -270,7 +396,10 @@ export class OAuthAPI {
 	 */
 	async refreshToken(refreshToken: string): Promise<GeniOAuthTokenResponse> {
 		const tokens = await refreshAccessToken(refreshToken, this.config);
-		storeTokens(tokens);
+		storeTokens("_session", {
+			accessToken: tokens.access_token,
+			refreshToken: tokens.refresh_token,
+		});
 		return tokens;
 	}
 
@@ -278,7 +407,7 @@ export class OAuthAPI {
 	 * Get stored access token
 	 */
 	getAccessToken(): string | null {
-		return getStoredAccessToken();
+		return getStoredAccessToken("_session");
 	}
 
 	/**
